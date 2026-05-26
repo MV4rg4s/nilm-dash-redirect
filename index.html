@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8">
 <title>EnergyLens Dashboard</title>
-<meta http-equiv="refresh" content="2; url=https://loading.energylens.placeholder">
 <style>
   body { background:#0f0f17; color:#f1f5f9; font-family:sans-serif;
          display:flex; align-items:center; justify-content:center;
@@ -11,29 +10,56 @@
   .box { text-align:center; }
   .icon { font-size:3rem; }
   p { color:#94a3b8; margin:12px 0; }
-  a { color:#60a5fa; }
+  a { color:#60a5fa; word-break:break-all; }
   .dot { display:inline-block; width:8px; height:8px; background:#4ade80;
          border-radius:50%; animation:pulse 1.5s infinite; margin-right:6px; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
+  .err { color:#f87171; font-size:0.85rem; }
 </style>
 </head>
 <body>
 <div class="box">
   <div class="icon">&#9889;</div>
   <p><span class="dot"></span>Redirecionando para o EnergyLens...</p>
-  <p style="font-size:0.8rem">Se nao redirecionar em 2s:<br>
-  <a id="link" href="#">abrir manualmente</a></p>
+  <p style="font-size:0.8rem">Se nao redirecionar:<br>
+  <a id="link" href="#">aguardando URL...</a></p>
+  <p id="msg" class="err"></p>
 </div>
 <script>
-  fetch('tunnel_url.txt?t=' + Date.now())
-    .then(r => r.text())
-    .then(url => {
-      url = url.trim();
-      if (url.startsWith('http')) {
-        document.getElementById('link').href = url;
-        setTimeout(() => window.location.href = url, 500);
-      }
-    });
+  // Buscar via raw.githubusercontent.com (cache TTL ~5min, menor que Pages 10min)
+  // + commits API com no-cache aggressive (TTL ~60s) como fallback
+  var sources = [
+    'https://raw.githubusercontent.com/MV4rg4s/nilm-dash-redirect/main/tunnel_url.txt?t=' + Date.now(),
+    'https://api.github.com/repos/MV4rg4s/nilm-dash-redirect/contents/tunnel_url.txt?t=' + Date.now(),
+    'tunnel_url.txt?t=' + Date.now()
+  ];
+
+  function tryFetch(idx) {
+    if (idx >= sources.length) {
+      document.getElementById('msg').textContent = 'Falha ao obter URL do tunnel.';
+      return;
+    }
+    var url = sources[idx];
+    var isApi = url.indexOf('api.github.com') >= 0;
+    fetch(url, { cache: 'no-store', headers: isApi ? {'Accept': 'application/vnd.github.v3.raw'} : {} })
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      })
+      .then(function(txt) {
+        var target = txt.trim();
+        if (!target.startsWith('http')) throw new Error('URL invalida');
+        document.getElementById('link').href = target;
+        document.getElementById('link').textContent = target;
+        document.getElementById('msg').textContent = 'Fonte: ' + (isApi ? 'API' : (idx === 0 ? 'raw' : 'Pages'));
+        setTimeout(function() { window.location.href = target; }, 600);
+      })
+      .catch(function(e) {
+        console.warn('source', idx, 'falhou:', e);
+        tryFetch(idx + 1);
+      });
+  }
+  tryFetch(0);
 </script>
 </body>
 </html>
